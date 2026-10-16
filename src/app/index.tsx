@@ -1,5 +1,5 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -10,6 +10,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getBudget, thisWeek, total, type BudgetData } from "../budget";
+import { getScans, type SavedScan } from "../scans";
 
 // ATI colours (taken from the logo)
 const GREEN = "#1B5E3B";
@@ -26,9 +28,6 @@ const DEALS = [
   { id: "3", name: "Eggs (6 pack)", emoji: "🥚", price: "£1.20", was: "£1.41", save: "Save 15%" },
 ];
 
-const WEEKLY_BUDGET = 80;
-const SPENT = 56.3;
-
 const NAV_ITEMS = [
   { label: "Home", emoji: "🏠" },
   { label: "Profile", emoji: "👤" },
@@ -40,9 +39,22 @@ const NAV_ITEMS = [
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
+  const [scans, setScans] = useState<SavedScan[]>([]);
+  const [budget, setBudget] = useState<BudgetData>({ weekly: null, spends: [] });
 
-  const left = WEEKLY_BUDGET - SPENT;
-  const progress = Math.min(SPENT / WEEKLY_BUDGET, 1);
+  // Reload the saved scans every time the Home Screen comes back into view
+  useFocusEffect(
+    useCallback(() => {
+      getScans().then(setScans);
+      getBudget().then(setBudget);
+    }, [])
+  );
+
+  const weekly = budget.weekly;
+  const spent = total(thisWeek(budget.spends));
+  const left = weekly !== null ? Math.round((weekly - spent) * 100) / 100 : null;
+  const progress = weekly ? Math.min(spent / weekly, 1) : 0;
+  const over = left !== null && left < 0;
 
   const comingSoon = (what: string) =>
     Alert.alert("Coming soon", `${what} will be added in a later step.`);
@@ -106,16 +118,46 @@ export default function HomeScreen() {
         </ScrollView>
         <Text style={styles.note}>Example prices only</Text>
 
+        {/* Recently scanned */}
+        <Text style={styles.sectionTitle}>Recently Scanned</Text>
+        {scans.length === 0 ? (
+          <Text style={styles.note}>Nothing scanned yet. Tap Scan product to start.</Text>
+        ) : (
+          scans.slice(0, 5).map((s) => (
+            <View key={s.code} style={styles.scanRow}>
+              <Text style={styles.scanName}>{s.name}</Text>
+              <Text style={styles.scanMeta}>
+                {[s.brand, s.quantity].filter(Boolean).join(" - ") || s.code}
+              </Text>
+            </View>
+          ))
+        )}
+        <View style={{ height: 8 }} />
+
         {/* Budget */}
-        <View style={styles.budgetCard}>
+        <Pressable
+          style={styles.budgetCard}
+          onPress={() => router.push("/budget")}
+          accessibilityRole="button"
+          accessibilityLabel="Open your food budget"
+        >
           <Text style={styles.budgetLabel}>Your Food Budget</Text>
-          <Text style={styles.budgetSpent}>£{SPENT.toFixed(2)}</Text>
-          <Text style={styles.budgetOf}>of £{WEEKLY_BUDGET} this week</Text>
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${progress * 100}%` }]} />
-          </View>
-          <Text style={styles.budgetLeft}>£{left.toFixed(2)} left</Text>
-        </View>
+          <Text style={styles.budgetSpent}>£{spent.toFixed(2)}</Text>
+          {weekly === null ? (
+            <Text style={styles.budgetOf}>spent this week. Tap to set your weekly budget</Text>
+          ) : (
+            <>
+              <Text style={styles.budgetOf}>of £{weekly.toFixed(2)} this week</Text>
+              <View style={styles.barTrack}>
+                <View style={[styles.barFill, { width: `${progress * 100}%` }]} />
+              </View>
+              <Text style={[styles.budgetLeft, over && { color: "#9A3412" }]}>
+                {over ? `Over budget by £${Math.abs(left!).toFixed(2)}` : `£${left!.toFixed(2)} left`}
+              </Text>
+            </>
+          )}
+          <Text style={styles.budgetTap}>Tap to add spending</Text>
+        </Pressable>
       </ScrollView>
 
       {/* Bottom navigation (buttons do nothing yet) */}
@@ -199,12 +241,23 @@ const styles = StyleSheet.create({
   dealPrice: { fontSize: 17, fontWeight: "800", color: GREEN },
   dealWas: { fontSize: 13, color: MUTED, textDecorationLine: "line-through" },
   note: { fontSize: 12, color: MUTED, marginTop: 6, marginBottom: 16 },
+  scanRow: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: MINT,
+  },
+  scanName: { fontSize: 16, fontWeight: "700", color: TEXT },
+  scanMeta: { fontSize: 13, color: MUTED, marginTop: 2 },
   budgetCard: { backgroundColor: MINT, borderRadius: 18, padding: 18 },
   budgetLabel: { fontSize: 15, fontWeight: "700", color: DARK },
   budgetSpent: { fontSize: 32, fontWeight: "800", color: DARK },
   budgetOf: { fontSize: 15, color: MUTED, marginBottom: 10 },
   barTrack: { height: 10, borderRadius: 5, backgroundColor: "#CFE3D6", overflow: "hidden" },
   barFill: { height: 10, borderRadius: 5, backgroundColor: GREEN },
+  budgetTap: { fontSize: 13, color: MUTED, marginTop: 8 },
   budgetLeft: { fontSize: 15, fontWeight: "700", color: GREEN, marginTop: 8 },
   nav: {
     flexDirection: "row",

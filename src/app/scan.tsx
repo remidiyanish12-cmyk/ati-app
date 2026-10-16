@@ -2,6 +2,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { Stack } from "expo-router";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { saveScan } from "../scans";
 
 // ATI colours
 const GREEN = "#1B5E3B";
@@ -85,11 +86,15 @@ export default function ScanScreen() {
       const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
       const json = await res.json();
       if (json.status === 1 && json.product) {
-        setInfo({
+        const found = {
           name: json.product.product_name || "Name not listed",
           brand: json.product.brands || "",
           quantity: json.product.quantity || "",
-        });
+        };
+        setInfo(found);
+        await saveScan({ code: barcode, ...found, time: Date.now() });
+      } else {
+        await saveScan({ code: barcode, name: "Unknown product", brand: "", quantity: "", time: Date.now() });
       }
     } catch {
       setFailed(true);
