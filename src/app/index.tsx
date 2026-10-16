@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -82,7 +83,7 @@ export default function HomeScreen() {
           <Text style={styles.scanSub}>Scan a product or search to save money.</Text>
           <Pressable
             style={styles.scanButton}
-            onPress={() => comingSoon("The barcode scanner")}
+            onPress={() => router.push("/scan")}
             accessibilityRole="button"
             accessibilityLabel="Scan product"
           >
